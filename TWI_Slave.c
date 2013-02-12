@@ -47,9 +47,18 @@
 #define LABORPORT	PORTD		// Ausgang fuer LABOR
 #define UHRPIN 0
 
-#define SERVOPORT	PORTD		// Ausgang fuer Servo
-#define SERVOPIN0 7				// Impuls für Servo
-#define SERVOPIN1 6				// Enable fuer Servo, Active H
+#define SERVOPORT             PORTD		// Ausgang fuer Servo
+#define SERVODDR              DDRD		// Ausgang fuer Servo
+#define SERVOPIN0             7				// Impuls für Servo
+#define SERVOPIN1             6				// Enable fuer Servo, Active H
+
+#define RADIATORPORT          PORTD
+#define RADIATORDDR           DDRD
+#define RADIATORIMPULSPIN		7		// Impuls für Radiator
+#define RADIATORSTATUSPIN		6		// Status fuer Radiator
+#define RADIATORSTUFE1			0x8000
+#define RADIATORSTUFE2			0xE000
+
 
 // Definitionen fuer mySlave PORTD
 //#define UHREIN 4
@@ -61,10 +70,12 @@
 
 
 #define LOOPLEDPORT		PORTD
+#define LOOPLEDDDR		DDRD
 
 // Define fuer Slave:
 #define LOOPLED			4
-#define TWILED			5
+#define TWILED          5
+#define LOOPSTEP			0xEFFF
 
 // Define fuer mySlave PORTD:
 //#define LOOPLED			2
@@ -105,7 +116,7 @@ volatile uint8_t rxbuffer[buffer_size];
 volatile uint8_t txbuffer[buffer_size];
 
 static volatile uint8_t SlaveStatus=0x00; //status
-
+static volatile uint8_t Radiatorstatus=0x00;
 
 void delay_ms(unsigned int ms);
 uint16_t EEMEM Brennerlaufzeit;	// Akkumulierte Laufzeit
@@ -184,11 +195,16 @@ void slaveinit(void)
  	DDRD |= (1<<DDD0);		//Pin 0 von PORT D als Ausgang fuer Schalter: ON		
 	DDRD |= (1<<DDD1);		//Pin 1 von PORT D als Ausgang fuer Schalter: OFF
 	DDRD |= (1<<DDD2);		//Pin 2 von PORT D als Ausgang fuer Buzzer
- 	DDRD |= (1<<DDD3);		//Pin 3 von PORT D als Ausgang fuer LED TWI
-	DDRD |= (1<<DDD4);		//Pin 4 von PORT D als Ausgang fuer LED
-	DDRD |= (1<<DDD5);		//Pin 5 von PORT D als Ausgang fuer LED Loop
- 	DDRD |= (1<<SERVOPIN1);	//Pin 6 von PORT D als Ausgang fuer Servo-Enable
-	DDRD |= (1<<SERVOPIN0);	//Pin 7 von PORT D als Ausgang fuer Servo-Impuls
+ 	//DDRD |= (1<<DDD3);		//Pin 3 von PORT D als Ausgang fuer LED TWI
+   
+   LOOPLEDPORT	|= (1<<LOOPLED);
+   LOOPLEDDDR	|= (1<<LOOPLED);
+	
+   RADIATORDDR |= (1<<RADIATORSTATUSPIN);		//Pin als Ausgang fuer Radiatorstatus >> nicht verwendet
+	RADIATORDDR |= (1<<RADIATORIMPULSPIN);		//Pin als Ausgang fuer Radiatorimpuls
+ 	
+   //SERVODDR |= (1<<SERVOPIN1);	//Pin 6 von PORT D als Ausgang fuer Servo-Enable
+	//SERVODDR |= (1<<SERVOPIN0);	//Pin 7 von PORT D als Ausgang fuer Servo-Impuls
 	
 	PORTD |=(1<<PD0);
 	delay_ms(200);
@@ -280,7 +296,7 @@ void timer2 (uint8_t wert)
 	OCR2 = wert;					//Setzen des Compare Registers auf Servoimpulsdauer
 } 
 
-ISR (SIG_OVERFLOW0) 
+ISR(TIMER0_OVF_vect) 
 { 
 	ADCImpuls++;
 	Servopause++;
@@ -330,7 +346,7 @@ ISR(TIMER2_COMP_vect) // Schaltet Impuls an SERVOPIN0 aus
 
 
 
-void main (void) 
+int main (void)
 {
 	/* 
 	in Start-loop in while
@@ -361,6 +377,11 @@ void main (void)
 	uint8_t TastaturCount=0;
 	uint8_t Servowert=0;
 	uint8_t Servorichtung=1;
+   
+   
+   uint16_t radiatorcount=0;
+   
+   
 	
 	uint16_t TastenStatus=0;
 	uint16_t Tastencount=0;
@@ -402,11 +423,29 @@ void main (void)
 	{	
 		//Blinkanzeige
 		loopcount0++;
-		if (loopcount0==0xBFFF)
+		if (loopcount0==LOOPSTEP)
 		{
 			loopcount0=0;
 			LOOPLEDPORT ^=(1<<LOOPLED);
 			//delay_ms(10);
+			
+		}
+
+		// Radiatorsteuerung
+		radiatorcount++;
+		if (radiatorcount>=LOOPSTEP)
+		{
+			radiatorcount=0;
+			if (Radiatorstatus & 0x03)
+			{
+				RADIATORPORT |= (1<<RADIATORSTATUSPIN); // Statusanzeige einschalten
+				RADIATORPORT |= (1<<RADIATORIMPULSPIN); // Radiatorheizung ein, Ausschalten je nach Code
+			}
+			else
+			{
+				RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
+				RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Kein Code, Radiatorheizung aus
+			}
 			
 		}
 
@@ -432,7 +471,45 @@ void main (void)
 		
 		
 		/* **** rx_buffer abfragen **************** */
-		//rxdata=0;
+      // RADIMPULSPIN in Loop-Schleife gesetzt, Ausschalten nach Zaehlerstand des gegebenen codes
+		
+      switch (Radiatorstatus & 0x03)
+      {
+         case 0: // kein Code, OFF
+            PORTD &= ~(1<<0);
+            RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung sicher aussschalten
+            RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
+            break;
+            
+         case 1:
+         {
+            PORTD |= (1<<0);
+            if (radiatorcount >= RADIATORSTUFE1)
+            {
+       //        RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung wieder aussschalten
+               RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
+            }
+         }
+            break;
+            
+         case 2:
+         {
+            PORTD |= (1<<0);
+            if (radiatorcount >= RADIATORSTUFE2)
+            {
+       //        RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung wieder aussschalten
+               RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
+            }
+         }
+            break;
+            
+         default:
+            RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung sicher aussschalten
+            RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
+            break;
+      }//switch
+      
+
 		
 		
 		//	Schaltuhr
@@ -595,6 +672,17 @@ void main (void)
 					LABORPORT &= ~(1<<UHRAUS);
 				}
 			
+         // Radiatorstatus
+         
+			Radiatorstatus = rxbuffer[1]; // Code fuer Radiator	0: Grundeinstellung
+         //								1: Absenkung 1
+         //								2: Absenkung 2
+			
+			lcd_gotoxy(7,1);
+			//lcd_puthex(rxbuffer[1]);
+			lcd_puts("R:\0");
+			lcd_puthex(Radiatorstatus);
+
 			
 			// tx_buffer laden
 				
