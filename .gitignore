@@ -10,3 +10,5 @@ build/*
 *.hex
 *.o
 Source/*
+.dep
+LABOR_60
