@@ -45,7 +45,7 @@
 
 
 #define LABORPORT	PORTD		// Ausgang fuer LABOR
-#define UHRPIN 0
+#define LAMPEBIT 0
 
 #define SERVOPORT             PORTD		// Ausgang fuer Servo
 #define SERVODDR              DDRD		// Ausgang fuer Servo
@@ -61,12 +61,12 @@
 
 
 // Definitionen fuer mySlave PORTD
-//#define UHREIN 4
-//#define UHRAUS 5
+//#define LAMPEEIN 4
+//#define LAMPEAUS 5
 
 // Definitionen Slave Labor
-#define UHREIN 0
-#define UHRAUS 1
+#define LAMPEEIN 0
+#define LAMPEAUS 1
 
 
 #define LOOPLEDPORT		PORTD
@@ -195,7 +195,7 @@ void slaveinit(void)
  	DDRD |= (1<<DDD0);		//Pin 0 von PORT D als Ausgang fuer Schalter: ON		
 	DDRD |= (1<<DDD1);		//Pin 1 von PORT D als Ausgang fuer Schalter: OFF
 	DDRD |= (1<<DDD2);		//Pin 2 von PORT D als Ausgang fuer Buzzer
- 	//DDRD |= (1<<DDD3);		//Pin 3 von PORT D als Ausgang fuer LED TWI
+ 	DDRD |= (1<<DDD3);		//Pin 3 von PORT D als Ausgang fuer LED TWI
    
    LOOPLEDPORT	|= (1<<LOOPLED);
    LOOPLEDDDR	|= (1<<LOOPLED);
@@ -367,11 +367,11 @@ int main (void)
 	lcd_cls();
 	lcd_puts("READY\0");
 	
-	LABORPORT &= ~(1<<UHREIN);//	UHREIN sicher low
-	LABORPORT &= ~(1<<UHRAUS);//	UHRAus sicher low
-	LABORPORT |= (1<<UHRAUS);
+	LABORPORT &= ~(1<<LAMPEEIN);//	LAMPEEIN sicher low
+	LABORPORT &= ~(1<<LAMPEAUS);//	UHRAus sicher low
+	LABORPORT |= (1<<LAMPEAUS);
 	delay_ms(10);
-	LABORPORT &= ~(1<<UHRAUS);
+	LABORPORT &= ~(1<<LAMPEAUS);
 
 	uint8_t Tastenwert=0;
 	uint8_t TastaturCount=0;
@@ -476,14 +476,14 @@ int main (void)
       switch (Radiatorstatus & 0x03)
       {
          case 0: // kein Code, OFF
-            PORTD &= ~(1<<0);
+            //PORTD &= ~(1<<0);
             RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung sicher aussschalten
             RADIATORPORT &= ~(1<<RADIATORSTATUSPIN); // Statusanzeige ausschalten
             break;
             
          case 1:
          {
-            PORTD |= (1<<0);
+            //PORTD |= (1<<0);
             if (radiatorcount >= RADIATORSTUFE1)
             {
        //        RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung wieder aussschalten
@@ -493,8 +493,9 @@ int main (void)
             break;
             
          case 2:
+         case 3:
          {
-            PORTD |= (1<<0);
+            //PORTD |= (1<<0);
             if (radiatorcount >= RADIATORSTUFE2)
             {
        //        RADIATORPORT &= ~(1<<RADIATORIMPULSPIN); // Heizung wieder aussschalten
@@ -515,8 +516,9 @@ int main (void)
 		//	Schaltuhr
 		
 	
-		if ((SlaveStatus & (1<<TWI_OK_BIT)) && (rxdata))
-		{
+		//if ((SlaveStatus & (1<<TWI_OK_BIT)) && (rxdata))
+		if (rxdata)
+      {
 			lcd_cls();
 			lcd_gotoxy(7,1);
 			lcd_puthex(twi);
@@ -643,7 +645,7 @@ int main (void)
 			lcd_puthex(Laborstatus);
 			//sei();
 			//delay_ms(1000);
-			if ( Laborstatus  & (1<<UHRPIN))
+			if ( Laborstatus  & (1<<LAMPEBIT))
 				{
 					//delay_ms(1000);
 					//Schaltuhr ein
@@ -651,11 +653,11 @@ int main (void)
 					lcd_gotoxy(19,1);
 					lcd_putc('1');
 					//sei();
-					LABORPORT &= ~(1<<UHRAUS);//	UHRAUS sicher low
-					LABORPORT &= ~(1<<UHREIN);//	UHREIN sicher low
-					LABORPORT |= (1<<UHREIN);
+					LABORPORT &= ~(1<<LAMPEAUS);//	LAMPEAUS sicher low
+					LABORPORT &= ~(1<<LAMPEEIN);//	LAMPEEIN sicher low
+					LABORPORT |= (1<<LAMPEEIN);
 					delay_ms(20);
-					LABORPORT &= ~(1<<UHREIN);
+					LABORPORT &= ~(1<<LAMPEEIN);
 				}
 				else
 				{
@@ -665,11 +667,11 @@ int main (void)
 					lcd_gotoxy(19,1);
 					lcd_putc('0');
 					//sei();
-					LABORPORT &= ~(1<<UHREIN);//	UHREIN sicher low
-					LABORPORT &= ~(1<<UHRAUS);//	UHRAUS sicher low
-					LABORPORT |= (1<<UHRAUS);
+					LABORPORT &= ~(1<<LAMPEEIN);//	LAMPEEIN sicher low
+					LABORPORT &= ~(1<<LAMPEAUS);//	LAMPEAUS sicher low
+					LABORPORT |= (1<<LAMPEAUS);
 					delay_ms(20);
-					LABORPORT &= ~(1<<UHRAUS);
+					LABORPORT &= ~(1<<LAMPEAUS);
 				}
 			
          // Radiatorstatus
